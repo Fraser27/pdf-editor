@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple PDF Editor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Adobe Clean', 'Segoe UI', -apple-system, sans-serif; background: #e5e5e5; color: #323232; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Top Header Bar */
+    .header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 20px; height: 48px; background: #323232; color: #fff;
+      border-bottom: 2px solid #fa0f00;
+    }
+    .header .logo { display: flex; align-items: center; gap: 8px; }
+    .header .logo svg { width: 28px; height: 28px; }
+    .header .logo span { font-size: 16px; font-weight: 600; letter-spacing: 0.3px; }
+    .header .file-name { font-size: 13px; color: #b3b3b3; margin-left: 12px; }
+    .header .header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex; align-items: center; gap: 2px;
+      padding: 6px 16px; background: #f5f5f5; border-bottom: 1px solid #d1d1d1;
+      min-height: 44px; flex-wrap: wrap;
+    }
+    .toolbar-group {
+      display: flex; align-items: center; gap: 2px;
+      padding: 0 8px;
+      border-right: 1px solid #d1d1d1;
+    }
+    .toolbar-group:last-child { border-right: none; }
+
+    .tool-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer;
+      background: transparent; color: #505050; font-size: 11px; gap: 2px;
+      transition: all 0.15s; position: relative; min-width: 52px;
+    }
+    .tool-btn:hover { background: #e0e0e0; color: #323232; }
+    .tool-btn.active { background: #cce3ff; color: #0d66d0; }
+    .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .tool-btn:disabled:hover { background: transparent; }
+    .tool-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .tool-btn .label { font-size: 10px; white-space: nowrap; }
+
+    /* Tooltip */
+    .tool-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%);
+      background: #323232; color: #fff; padding: 4px 8px; border-radius: 3px;
+      font-size: 11px; white-space: nowrap; z-index: 100; pointer-events: none;
+    }
+
+    /* Main Layout */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* Side Panel */
+    .side-panel {
+      width: 260px; background: #fafafa; border-right: 1px solid #d1d1d1;
+      display: none; flex-direction: column; overflow-y: auto;
+    }
+    .side-panel.open { display: flex; }
+    .side-panel-header {
+      padding: 14px 16px; font-size: 14px; font-weight: 600;
+      border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between;
+    }
+    .side-panel-header button {
+      background: none; border: none; cursor: pointer; color: #909090; font-size: 18px; line-height: 1;
+    }
+    .side-panel-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .side-panel-body label { font-size: 12px; color: #6e6e6e; font-weight: 500; }
+    .side-panel-body input[type="text"],
+    .side-panel-body input[type="number"],
+    .side-panel-body select,
+    .side-panel-body textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid #d1d1d1; border-radius: 4px;
+      font-size: 13px; background: #fff; color: #323232; font-family: inherit;
+    }
+    .side-panel-body textarea { resize: vertical; min-height: 60px; }
+    .color-row { display: flex; align-items: center; gap: 8px; }
+    .color-row input[type="color"] { width: 32px; height: 32px; border: 1px solid #d1d1d1; border-radius: 4px; cursor: pointer; padding: 2px; }
+    .size-row { display: flex; gap: 8px; }
+    .size-row div { flex: 1; }
+
+    /* Tabs */
+    .sig-tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 12px; }
+    .sig-tab {
+      flex: 1; padding: 8px 0; text-align: center; font-size: 12px; font-weight: 600;
+      color: #6e6e6e; background: none; border: none; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+    }
+    .sig-tab:hover { color: #323232; }
+    .sig-tab.active { color: #0d66d0; border-bottom-color: #0d66d0; }
+    .sig-tab-content { display: none; }
+    .sig-tab-content.active { display: block; }
+    .sig-upload-preview {
+      width: 100%; max-height: 100px; object-fit: contain; border: 1px solid #d1d1d1;
+      border-radius: 4px; background: #fff; display: none;
+    }
+
+    .panel-btn {
+      padding: 10px; border: none; border-radius: 4px; cursor: pointer;
+      font-size: 13px; font-weight: 600; transition: all 0.15s;
+    }
+    .panel-btn-primary { background: #0d66d0; color: #fff; }
+    .panel-btn-primary:hover { background: #0b57b3; }
+    .panel-btn-danger { background: #e34850; color: #fff; }
+    .panel-btn-danger:hover { background: #c9252d; }
+
+    /* Canvas Area */
+    .canvas-area {
+      flex: 1; overflow: auto; display: flex; justify-content: center;
+      padding: 24px; background: #e5e5e5;
+    }
+    .canvas-wrapper { position: relative; display: inline-block; box-shadow: 0 2px 16px rgba(0,0,0,0.18); }
+    #pdfCanvas { display: block; background: #fff; }
+
+    /* Preview elements */
+    .preview-img, .preview-text {
+      position: absolute; pointer-events: none; opacity: 0.55;
+      border: 2px dashed #0d66d0; transform: translate(-50%, -50%);
+    }
+    .preview-text {
+      color: #323232; display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.5); padding: 2px 6px;
+    }
+    .placed-marker {
+      position: absolute; pointer-events: none;
+      border: 1px solid rgba(13,102,208,0.4);
+    }
+    .placed-text {
+      position: absolute; pointer-events: none;
+      display: flex; align-items: flex-start;
+    }
+
+    /* Signature Canvas */
+    .sig-canvas-wrap {
+      border: 1px solid #d1d1d1; border-radius: 4px; background: #fff; position: relative;
+    }
+    #sigCanvas { display: block; cursor: crosshair; width: 100%; border-radius: 4px; }
+    .sig-hint {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      color: #c0c0c0; font-size: 13px; pointer-events: none;
+    }
+
+    /* Page nav in footer */
+    .page-bar {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      padding: 8px 16px; background: #f5f5f5; border-top: 1px solid #d1d1d1;
+    }
+    .page-bar button {
+      background: none; border: 1px solid #d1d1d1; border-radius: 4px;
+      padding: 4px 10px; cursor: pointer; font-size: 13px; color: #505050;
+    }
+    .page-bar button:hover { background: #e0e0e0; }
+    .page-bar button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .page-bar span { font-size: 13px; color: #6e6e6e; }
+
+    /* Empty state */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex: 1; gap: 16px; color: #909090;
+    }
+    .empty-state svg { width: 64px; height: 64px; opacity: 0.4; }
+    .empty-state p { font-size: 14px; }
+    .empty-state label {
+      padding: 10px 24px; background: #0d66d0; color: #fff; border-radius: 4px;
+      cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s;
+    }
+    .empty-state label:hover { background: #0b57b3; }
+
+    /* Zoom controls */
+    .zoom-controls { display: flex; align-items: center; gap: 4px; }
+    .zoom-controls button {
+      background: none; border: 1px solid #d1d1d1; border-radius: 4px;
+      width: 28px; height: 28px; cursor: pointer; font-size: 16px; color: #505050;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .zoom-controls button:hover { background: #e0e0e0; }
+    .zoom-controls span { font-size: 12px; color: #6e6e6e; min-width: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#fa0f00"/><path d="M15.5 4H7.5C6.67 4 6 4.67 6 5.5v13c0 .83.67 1.5 1.5 1.5h9c.83 0 1.5-.67 1.5-1.5V7L15.5 4z" fill="#fff"/><path d="M14 4v3.5h3.5" fill="none" stroke="#fa0f00" stroke-width="0.8"/><path d="M9 13h6M9 15.5h4" stroke="#fa0f00" stroke-width="0.8" stroke-linecap="round"/></svg>
+      <span>Simple PDF Editor</span>
+    </div>
+    <span class="file-name" id="fileName">No file open</span>
+    <div class="header-actions">
+      <input type="file" id="pdfInput" accept=".pdf" style="display:none">
+      <label for="pdfInput" class="tool-btn" style="color:#fff;min-width:auto;flex-direction:row;gap:6px;padding:6px 14px;border-radius:4px;font-size:13px;" data-tooltip="Open a PDF file">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17V3a1 1 0 011-1h8l5 5v10a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M11 2v5h5"/></svg>
+        Open PDF
+      </label>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="mainToolbar">
+    <div class="toolbar-group">
+      <button class="tool-btn" id="toolAddText" disabled data-tooltip="Add text annotation to PDF">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16V4h12"/><path d="M10 4v12"/><path d="M6 10h8"/></svg>
+        <span class="label">Add Text</span>
+      </button>
+      <button class="tool-btn" id="toolAddImage" disabled data-tooltip="Place an image onto the PDF">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1.5"/><circle cx="7" cy="8" r="1.5"/><path d="M2 14l4-4 3 3 3-4 6 5"/></svg>
+        <span class="label">Add Image</span>
+      </button>
+      <button class="tool-btn" id="toolESign" disabled data-tooltip="Draw your signature and place it">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17c2-2 4-6 6-6s2 3 4 3 3-4 4-4"/><path d="M14 3l3 3-8 8H6v-3l8-8z"/></svg>
+        <span class="label">E-Sign</span>
+      </button>
+    </div>
+    <div class="toolbar-group">
+      <button class="tool-btn" id="undoBtn" disabled data-tooltip="Undo last action">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8l4-4M4 8l4 4"/><path d="M4 8h9a4 4 0 010 8H9"/></svg>
+        <span class="label">Undo</span>
+      </button>
+      <button class="tool-btn" id="clearAllBtn" disabled data-tooltip="Remove all annotations">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        <span class="label">Clear All</span>
+      </button>
+    </div>
+    <div class="toolbar-group">
+      <div class="zoom-controls">
+        <button id="zoomOut" disabled data-tooltip="Zoom out">−</button>
+        <span id="zoomLevel">100%</span>
+        <button id="zoomIn" disabled data-tooltip="Zoom in">+</button>
+      </div>
+    </div>
+    <div class="toolbar-group" style="margin-left:auto; border-right:none;">
+      <button class="tool-btn" id="downloadBtn" disabled data-tooltip="Save and download the edited PDF" style="color:#0d66d0;">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2"/></svg>
+        <span class="label">Download</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <!-- Side Panel -->
+    <div class="side-panel" id="sidePanel">
+      <!-- Text Panel -->
+      <div id="panelText" style="display:none;">
+        <div class="side-panel-header">Add Text <button id="closePanelText" aria-label="Close panel">×</button></div>
+        <div class="side-panel-body">
+          <label for="textContent">Text</label>
+          <textarea id="textContent" placeholder="Type your text here...">Sample Text</textarea>
+          <label for="textFont">Font</label>
+          <select id="textFont">
+            <option value="Helvetica">Helvetica</option>
+            <option value="TimesRoman">Times Roman</option>
+            <option value="Courier">Courier</option>
+          </select>
+          <label>Size &amp; Color</label>
+          <div class="color-row">
+            <input type="number" id="textSize" value="16" min="6" max="120" style="width:60px;">
+            <span style="font-size:12px;color:#6e6e6e;">px</span>
+            <input type="color" id="textColor" value="#000000" title="Text color">
+          </div>
+          <p style="font-size:11px;color:#909090;">Click on the PDF to place text.</p>
+        </div>
+      </div>
+      <!-- Image Panel -->
+      <div id="panelImage" style="display:none;">
+        <div class="side-panel-header">Add Image <button id="closePanelImage" aria-label="Close panel">×</button></div>
+        <div class="side-panel-body">
+          <label>Select Image</label>
+          <input type="file" id="imgInput" accept="image/*">
+          <label>Dimensions (px)</label>
+          <div class="size-row">
+            <div><input type="number" id="imgWidth" value="150" min="10" max="2000" placeholder="Width"></div>
+            <div><input type="number" id="imgHeight" value="150" min="10" max="2000" placeholder="Height"></div>
+          </div>
+          <p id="imgStatus" style="font-size:11px;color:#909090;">No image loaded.</p>
+        </div>
+      </div>
+      <!-- E-Sign Panel -->
+      <div id="panelSign" style="display:none;">
+        <div class="side-panel-header">E-Sign <button id="closePanelSign" aria-label="Close panel">×</button></div>
+        <div class="side-panel-body">
+          <div class="sig-tabs">
+            <button class="sig-tab active" data-sig-tab="draw">✏️ Draw</button>
+            <button class="sig-tab" data-sig-tab="upload">📁 Upload Image</button>
+          </div>
+          <!-- Draw Tab -->
+          <div class="sig-tab-content active" id="sigTabDraw">
+            <label>Draw your signature</label>
+            <div class="sig-canvas-wrap">
+              <canvas id="sigCanvas" width="228" height="100"></canvas>
+              <span class="sig-hint" id="sigHint">Sign here</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button class="panel-btn panel-btn-danger" id="sigClear" style="flex:1;">Clear</button>
+              <button class="panel-btn panel-btn-primary" id="sigApply" style="flex:1;">Apply</button>
+            </div>
+          </div>
+          <!-- Upload Tab -->
+          <div class="sig-tab-content" id="sigTabUpload">
+            <label>Upload a signature image</label>
+            <input type="file" id="sigFileInput" accept="image/*" style="margin-top:4px;">
+            <img id="sigUploadPreview" class="sig-upload-preview" alt="Signature preview">
+            <button class="panel-btn panel-btn-primary" id="sigUploadApply" style="margin-top:8px;width:100;" disabled>Apply Image</button>
+          </div>
+          <label style="margin-top:12px;">Signature Size (px)</label>
+          <div class="size-row">
+            <div><input type="number" id="sigWidth" value="180" min="20" max="600" placeholder="Width"></div>
+            <div><input type="number" id="sigHeight" value="60" min="10" max="300" placeholder="Height"></div>
+          </div>
+          <p id="sigStatus" style="font-size:11px;color:#909090;">Draw or upload, then click on PDF.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas / Empty State -->
+    <div class="canvas-area" id="canvasArea">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 64 64" fill="none" stroke="#909090" stroke-width="2"><rect x="12" y="4" width="40" height="56" rx="3"/><path d="M36 4v14h14"/><path d="M24 34h16M24 40h10"/></svg>
+        <p>Open a PDF to get started</p>
+        <label for="pdfInput">Open PDF</label>
+      </div>
+      <div class="canvas-wrapper" id="canvasWrapper" style="display:none;">
+        <canvas id="pdfCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page Bar -->
+  <div class="page-bar" id="pageBar" style="display:none;">
+    <button id="prevPage" disabled aria-label="Previous page">◀ Prev</button>
+    <span id="pageInfo">1 / 1</span>
+    <button id="nextPage" disabled aria-label="Next page">Next ▶</button>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+
+    const state = {
+      pdfBytes: null, pdfDoc: null, currentPage: 1, totalPages: 0,
+      scale: 1.5, mode: null, // 'text' | 'image' | 'sign'
+      imageBytes: null, imageType: null,
+      signatureBytes: null,
+      placements: [], // {type, page, canvasX, canvasY, ...data}
+    };
+
+    const $ = (s) => document.querySelector(s);
+    const canvas = $('#pdfCanvas'), ctx = canvas.getContext('2d');
+    const wrapper = $('#canvasWrapper');
+
+    // --- Tool Activation ---
+    function setMode(mode) {
+      state.mode = state.mode === mode ? null : mode;
+      ['toolAddText','toolAddImage','toolESign'].forEach(id => $(('#'+id)).classList.remove('active'));
+      ['panelText','panelImage','panelSign'].forEach(id => $(('#'+id)).style.display = 'none');
+      if (state.mode) {
+        $(`#tool${mode === 'text' ? 'AddText' : mode === 'image' ? 'AddImage' : 'ESign'}`).classList.add('active');
+        $(`#panel${mode === 'text' ? 'Text' : mode === 'image' ? 'Image' : 'Sign'}`).style.display = 'block';
+        $('#sidePanel').classList.add('open');
+      } else {
+        $('#sidePanel').classList.remove('open');
+      }
+      removePreview();
+    }
+
+    $('#toolAddText').onclick = () => setMode('text');
+    $('#toolAddImage').onclick = () => setMode('image');
+    $('#toolESign').onclick = () => setMode('sign');
+    $('#closePanelText').onclick = () => setMode(null);
+    $('#closePanelImage').onclick = () => setMode(null);
+    $('#closePanelSign').onclick = () => setMode(null);
+
+    // --- PDF Loading ---
+    $('#pdfInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      state.pdfBytes = new Uint8Array(await file.arrayBuffer());
+      state.pdfDoc = await pdfjsLib.getDocument({ data: state.pdfBytes.slice() }).promise;
+      state.totalPages = state.pdfDoc.numPages;
+      state.currentPage = 1;
+      state.placements = [];
+      clearMarkers();
+      $('#emptyState').style.display = 'none';
+      wrapper.style.display = 'inline-block';
+      $('#pageBar').style.display = 'flex';
+      $('#fileName').textContent = file.name;
+      await renderPage();
+      updatePageNav();
+      enableTools(true);
+    });
+
+    function enableTools(on) {
+      ['toolAddText','toolAddImage','toolESign','downloadBtn','zoomIn','zoomOut'].forEach(id => $(('#'+id)).disabled = !on);
+    }
+
+    // --- Render ---
+    async function renderPage() {
+      if (!state.pdfDoc) return;
+      const page = await state.pdfDoc.getPage(state.currentPage);
+      const viewport = page.getViewport({ scale: state.scale });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      clearMarkers();
+      drawPlacedMarkers();
+      updateZoomLabel();
+    }
+
+    // --- Page Nav ---
+    $('#prevPage').onclick = async () => { if (state.currentPage > 1) { state.currentPage--; await renderPage(); updatePageNav(); } };
+    $('#nextPage').onclick = async () => { if (state.currentPage < state.totalPages) { state.currentPage++; await renderPage(); updatePageNav(); } };
+    function updatePageNav() {
+      $('#pageInfo').textContent = `${state.currentPage} / ${state.totalPages}`;
+      $('#prevPage').disabled = state.currentPage <= 1;
+      $('#nextPage').disabled = state.currentPage >= state.totalPages;
+    }
+
+    // --- Zoom ---
+    $('#zoomIn').onclick = async () => { state.scale = Math.min(state.scale + 0.25, 4); await renderPage(); };
+    $('#zoomOut').onclick = async () => { state.scale = Math.max(state.scale - 0.25, 0.5); await renderPage(); };
+    function updateZoomLabel() { $('#zoomLevel').textContent = Math.round(state.scale / 1.5 * 100) + '%'; }
+
+    // --- Image Loading ---
+    $('#imgInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      state.imageBytes = new Uint8Array(await file.arrayBuffer());
+      state.imageType = file.type === 'image/png' ? 'png' : 'jpeg';
+      $('#imgStatus').textContent = `"${file.name}" loaded. Click on PDF to place.`;
+    });
+
+    // --- Signature Tabs ---
+    document.querySelectorAll('.sig-tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.sig-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.sig-tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        $(`#sigTab${tab.dataset.sigTab === 'draw' ? 'Draw' : 'Upload'}`).classList.add('active');
+      };
+    });
+
+    // --- Signature Pad (Draw) ---
+    const sigCanvas = $('#sigCanvas'), sigCtx = sigCanvas.getContext('2d');
+    let sigDrawing = false, sigHasContent = false;
+    sigCanvas.addEventListener('pointerdown', (e) => {
+      sigDrawing = true; sigHasContent = true;
+      $('#sigHint').style.display = 'none';
+      const r = sigCanvas.getBoundingClientRect();
+      sigCtx.beginPath();
+      sigCtx.moveTo((e.clientX - r.left) * (sigCanvas.width / r.width), (e.clientY - r.top) * (sigCanvas.height / r.height));
+    });
+    sigCanvas.addEventListener('pointermove', (e) => {
+      if (!sigDrawing) return;
+      const r = sigCanvas.getBoundingClientRect();
+      sigCtx.lineWidth = 2; sigCtx.strokeStyle = '#1a1a1a'; sigCtx.lineCap = 'round';
+      sigCtx.lineTo((e.clientX - r.left) * (sigCanvas.width / r.width), (e.clientY - r.top) * (sigCanvas.height / r.height));
+      sigCtx.stroke();
+    });
+    sigCanvas.addEventListener('pointerup', () => sigDrawing = false);
+    sigCanvas.addEventListener('pointerleave', () => sigDrawing = false);
+
+    $('#sigClear').onclick = () => {
+      sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      sigHasContent = false; state.signatureBytes = null;
+      $('#sigHint').style.display = 'block';
+      $('#sigStatus').textContent = 'Signature cleared.';
+    };
+    $('#sigApply').onclick = () => {
+      if (!sigHasContent) return;
+      sigCanvas.toBlob((blob) => {
+        blob.arrayBuffer().then(buf => {
+          state.signatureBytes = new Uint8Array(buf);
+          $('#sigStatus').textContent = 'Drawn signature ready. Click on PDF to place.';
+        });
+      }, 'image/png');
+    };
+
+    // --- Signature Upload ---
+    let sigUploadBytes = null;
+    $('#sigFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      sigUploadBytes = new Uint8Array(await file.arrayBuffer());
+      const blob = new Blob([sigUploadBytes], { type: file.type });
+      const preview = $('#sigUploadPreview');
+      preview.src = URL.createObjectURL(blob);
+      preview.style.display = 'block';
+      $('#sigUploadApply').disabled = false;
+      $('#sigStatus').textContent = `"${file.name}" loaded. Click Apply Image.`;
+    });
+    $('#sigUploadApply').onclick = () => {
+      if (!sigUploadBytes) return;
+      state.signatureBytes = sigUploadBytes.slice();
+      $('#sigStatus').textContent = 'Uploaded signature ready. Click on PDF to place.';
+    };
+
+    // --- Preview on Hover ---
+    let previewEl = null;
+    function removePreview() { if (previewEl) { previewEl.remove(); previewEl = null; } }
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!state.pdfDoc) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+
+      if (state.mode === 'image' && state.imageBytes) {
+        if (!previewEl || previewEl.tagName !== 'IMG') {
+          removePreview();
+          previewEl = document.createElement('img');
+          previewEl.className = 'preview-img';
+          wrapper.appendChild(previewEl);
+          const blob = new Blob([state.imageBytes], { type: state.imageType === 'png' ? 'image/png' : 'image/jpeg' });
+          previewEl.src = URL.createObjectURL(blob);
+        }
+        previewEl.style.width = ($('#imgWidth').value || 150) + 'px';
+        previewEl.style.height = ($('#imgHeight').value || 150) + 'px';
+        previewEl.style.left = x + 'px'; previewEl.style.top = y + 'px';
+      } else if (state.mode === 'sign' && state.signatureBytes) {
+        if (!previewEl || !previewEl.classList.contains('preview-img') || previewEl.tagName !== 'IMG') {
+          removePreview();
+          previewEl = document.createElement('img');
+          previewEl.className = 'preview-img';
+          wrapper.appendChild(previewEl);
+          const blob = new Blob([state.signatureBytes], { type: 'image/png' });
+          previewEl.src = URL.createObjectURL(blob);
+        }
+        previewEl.style.width = ($('#sigWidth').value || 180) + 'px';
+        previewEl.style.height = ($('#sigHeight').value || 60) + 'px';
+        previewEl.style.left = x + 'px'; previewEl.style.top = y + 'px';
+      } else if (state.mode === 'text') {
+        if (!previewEl || previewEl.tagName !== 'DIV') {
+          removePreview();
+          previewEl = document.createElement('div');
+          previewEl.className = 'preview-text';
+          wrapper.appendChild(previewEl);
+        }
+        const txt = $('#textContent').value || 'Text';
+        const sz = $('#textSize').value || 16;
+        const col = $('#textColor').value;
+        previewEl.textContent = txt;
+        previewEl.style.fontSize = sz + 'px';
+        previewEl.style.color = col;
+        previewEl.style.left = x + 'px'; previewEl.style.top = y + 'px';
+      } else {
+        removePreview();
+      }
+    });
+    canvas.addEventListener('mouseleave', removePreview);
+
+    // --- Place on Click ---
+    canvas.addEventListener('click', (e) => {
+      if (!state.pdfDoc || !state.mode) return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+
+      if (state.mode === 'text') {
+        const text = $('#textContent').value || 'Text';
+        const size = parseInt($('#textSize').value) || 16;
+        const color = $('#textColor').value;
+        const font = $('#textFont').value;
+        state.placements.push({ type: 'text', page: state.currentPage, canvasX: cx, canvasY: cy, text, size, color, font });
+      } else if (state.mode === 'image' && state.imageBytes) {
+        const w = parseInt($('#imgWidth').value) || 150, h = parseInt($('#imgHeight').value) || 150;
+        state.placements.push({ type: 'image', page: state.currentPage, canvasX: cx, canvasY: cy, width: w, height: h, imageBytes: state.imageBytes.slice(), imageType: state.imageType });
+      } else if (state.mode === 'sign' && state.signatureBytes) {
+        const w = parseInt($('#sigWidth').value) || 180, h = parseInt($('#sigHeight').value) || 60;
+        state.placements.push({ type: 'image', page: state.currentPage, canvasX: cx, canvasY: cy, width: w, height: h, imageBytes: state.signatureBytes.slice(), imageType: 'png' });
+      } else return;
+
+      drawPlacedMarkers();
+      $('#undoBtn').disabled = false;
+      $('#clearAllBtn').disabled = false;
+    });
+
+    // --- Draw Markers ---
+    function drawPlacedMarkers() {
+      clearMarkers();
+      state.placements.filter(p => p.page === state.currentPage).forEach(p => {
+        if (p.type === 'image') {
+          const el = document.createElement('img');
+          el.className = 'placed-marker';
+          const blob = new Blob([p.imageBytes], { type: p.imageType === 'png' ? 'image/png' : 'image/jpeg' });
+          el.src = URL.createObjectURL(blob);
+          el.style.width = p.width + 'px'; el.style.height = p.height + 'px';
+          el.style.left = (p.canvasX - p.width / 2) + 'px'; el.style.top = (p.canvasY - p.height / 2) + 'px';
+          wrapper.appendChild(el);
+        } else if (p.type === 'text') {
+          const el = document.createElement('div');
+          el.className = 'placed-text';
+          el.textContent = p.text;
+          el.style.fontSize = p.size + 'px'; el.style.color = p.color;
+          el.style.left = (p.canvasX) + 'px'; el.style.top = (p.canvasY - p.size) + 'px';
+          el.style.fontFamily = p.font === 'Courier' ? 'Courier, monospace' : p.font === 'TimesRoman' ? 'Times New Roman, serif' : 'Helvetica, Arial, sans-serif';
+          wrapper.appendChild(el);
+        }
+      });
+    }
+    function clearMarkers() {
+      wrapper.querySelectorAll('.placed-marker, .placed-text').forEach(el => el.remove());
+    }
+
+    // --- Undo / Clear ---
+    $('#undoBtn').onclick = () => {
+      state.placements.pop(); drawPlacedMarkers();
+      $('#undoBtn').disabled = state.placements.length === 0;
+      $('#clearAllBtn').disabled = state.placements.length === 0;
+    };
+    $('#clearAllBtn').onclick = () => {
+      state.placements = []; drawPlacedMarkers();
+      $('#undoBtn').disabled = true; $('#clearAllBtn').disabled = true;
+    };
+
+    // --- Download ---
+    $('#downloadBtn').onclick = async () => {
+      if (!state.pdfBytes) return;
+      const pdfDoc = await PDFDocument.load(state.pdfBytes);
+      const fontMap = {
+        Helvetica: await pdfDoc.embedFont(StandardFonts.Helvetica),
+        TimesRoman: await pdfDoc.embedFont(StandardFonts.TimesRoman),
+        Courier: await pdfDoc.embedFont(StandardFonts.Courier),
+      };
+
+      for (const p of state.placements) {
+        const page = pdfDoc.getPage(p.page - 1);
+        const { width: pageW, height: pageH } = page.getSize();
+        const scaleX = pageW / canvas.width, scaleY = pageH / canvas.height;
+
+        if (p.type === 'image') {
+          const img = p.imageType === 'png' ? await pdfDoc.embedPng(p.imageBytes) : await pdfDoc.embedJpg(p.imageBytes);
+          const w = p.width * scaleX, h = p.height * scaleY;
+          page.drawImage(img, { x: p.canvasX * scaleX - w / 2, y: pageH - p.canvasY * scaleY - h / 2, width: w, height: h });
+        } else if (p.type === 'text') {
+          const hex = p.color.replace('#', '');
+          const r = parseInt(hex.substring(0, 2), 16) / 255;
+          const g = parseInt(hex.substring(2, 4), 16) / 255;
+          const b = parseInt(hex.substring(4, 6), 16) / 255;
+          const fontSize = p.size * scaleY;
+          page.drawText(p.text, {
+            x: p.canvasX * scaleX,
+            y: pageH - p.canvasY * scaleY,
+            size: fontSize,
+            font: fontMap[p.font] || fontMap.Helvetica,
+            color: rgb(r, g, b),
+          });
+        }
+      }
+
+      const bytes = await pdfDoc.save();
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'edited_' + ($('#fileName').textContent || 'document.pdf');
+      a.click();
+    };
+  </script>
+</body>
+</html>
