@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Acrobat PDF Editor</title>
+  <title>Simple PDF Editor</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <style>
@@ -88,14 +88,15 @@
     .zoom-controls button { background: none; border: 1px solid #d1d1d1; border-radius: 4px; width: 28px; height: 28px; cursor: pointer; font-size: 16px; color: #505050; display: flex; align-items: center; justify-content: center; }
     .zoom-controls button:hover { background: #e0e0e0; }
     .zoom-controls span { font-size: 12px; color: #6e6e6e; min-width: 40px; text-align: center; }
-    .hint-bar { font-size: 12px; color: #6e6e6e; background: #fffbe6; border-bottom: 1px solid #e8d44d; padding: 6px 16px; text-align: center; display: none; }
+    .hint-bar { font-size: 13px; font-weight: 600; color: #fff; background: #0d66d0; border-bottom: none; padding: 10px 16px; text-align: center; display: none; letter-spacing: 0.2px; animation: hintPulse 2s ease-in-out infinite; }
+    @keyframes hintPulse { 0%, 100% { box-shadow: 0 2px 8px rgba(13,102,208,0.3); } 50% { box-shadow: 0 2px 20px rgba(13,102,208,0.6); } }
   </style>
 
   <!-- Header -->
   <div class="header">
     <div class="logo">
       <svg viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#fa0f00"/><path d="M15.5 4H7.5C6.67 4 6 4.67 6 5.5v13c0 .83.67 1.5 1.5 1.5h9c.83 0 1.5-.67 1.5-1.5V7L15.5 4z" fill="#fff"/><path d="M14 4v3.5h3.5" fill="none" stroke="#fa0f00" stroke-width="0.8"/><path d="M9 13h6M9 15.5h4" stroke="#fa0f00" stroke-width="0.8" stroke-linecap="round"/></svg>
-      <span>Acrobat</span>
+      <span>Simple PDF Editor</span>
     </div>
     <span class="file-name" id="fileName">No file open</span>
     <div class="header-actions">
@@ -110,15 +111,15 @@
   <!-- Toolbar -->
   <div class="toolbar">
     <div class="toolbar-group">
-      <button class="tool-btn" id="toolAddText" disabled data-tooltip="Drag on PDF to place text">
+      <button class="tool-btn" id="toolAddText" disabled data-tooltip="Click & drag on PDF to place text">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 16V4h12"/><path d="M10 4v12"/><path d="M6 10h8"/></svg>
         <span class="label">Add Text</span>
       </button>
-      <button class="tool-btn" id="toolAddImage" disabled data-tooltip="Drag on PDF to place image">
+      <button class="tool-btn" id="toolAddImage" disabled data-tooltip="Click & drag on PDF to place image">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="16" height="14" rx="1.5"/><circle cx="7" cy="8" r="1.5"/><path d="M2 14l4-4 3 3 3-4 6 5"/></svg>
         <span class="label">Add Image</span>
       </button>
-      <button class="tool-btn" id="toolESign" disabled data-tooltip="Drag on PDF to place signature">
+      <button class="tool-btn" id="toolESign" disabled data-tooltip="Click & drag on PDF to place signature">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17c2-2 4-6 6-6s2 3 4 3 3-4 4-4"/><path d="M14 3l3 3-8 8H6v-3l8-8z"/></svg>
         <span class="label">E-Sign</span>
       </button>
@@ -165,7 +166,7 @@
             <span style="font-size:12px;color:#6e6e6e;">px</span>
             <input type="color" id="textColor" value="#000000">
           </div>
-          <p style="font-size:11px;color:#909090;">Drag a rectangle on the PDF to place text.</p>
+          <p style="font-size:11px;color:#909090;">Click and drag on the page to draw a box where your text will go.</p>
         </div>
       </div>
       <div id="panelImage" style="display:none;">
@@ -197,7 +198,7 @@
             <img id="sigUploadPreview" class="sig-upload-preview" alt="Preview">
             <button class="panel-btn panel-btn-primary" id="sigUploadApply" style="margin-top:8px;width:100%;" disabled>Apply Image</button>
           </div>
-          <p id="sigStatus" style="font-size:11px;color:#909090;margin-top:12px;">Draw or upload, then drag on PDF.</p>
+          <p id="sigStatus" style="font-size:11px;color:#909090;margin-top:12px;">Draw or upload your signature, then click &amp; drag on the page to place it.</p>
         </div>
       </div>
     </div>
@@ -258,10 +259,12 @@
         $(`#tool${m === 'text' ? 'AddText' : m === 'image' ? 'AddImage' : 'ESign'}`).classList.add('active');
         $(`#panel${m === 'text' ? 'Text' : m === 'image' ? 'Image' : 'Sign'}`).style.display = 'block';
         $('#sidePanel').classList.add('open');
-        showHint('Drag a rectangle on the PDF to place your ' + (m === 'text' ? 'text' : m === 'image' ? 'image' : 'signature'));
+        showHint('Click and drag on the page to draw where you want your ' + (m === 'text' ? 'text' : m === 'image' ? 'image' : 'signature'));
+        canvas.style.cursor = 'crosshair';
       } else {
         $('#sidePanel').classList.remove('open');
         showHint('');
+        canvas.style.cursor = 'default';
       }
       drawPlacedMarkers();
     }
@@ -298,6 +301,7 @@
       $('#pageBar').style.display = 'flex';
       $('#fileName').textContent = file.name;
       await renderPage(); updatePageNav(); enableTools(true);
+      setMode('text'); // auto-activate Add Text so user can start placing immediately
     });
 
     function enableTools(on) {
@@ -331,7 +335,7 @@
       state.imageType = file.type === 'image/png' ? 'png' : 'jpeg';
       if (state.imageObjUrl) URL.revokeObjectURL(state.imageObjUrl);
       state.imageObjUrl = URL.createObjectURL(new Blob([state.imageBytes], { type: file.type }));
-      $('#imgStatus').textContent = `"${file.name}" loaded. Drag on PDF.`;
+      $('#imgStatus').textContent = `"${file.name}" loaded. Click & drag on the page to place it.`;
     });
 
     // ── Signature Tabs ──
@@ -373,7 +377,7 @@
         state.signatureBytes = new Uint8Array(buf);
         if (state.sigObjUrl) URL.revokeObjectURL(state.sigObjUrl);
         state.sigObjUrl = URL.createObjectURL(new Blob([state.signatureBytes], { type: 'image/png' }));
-        $('#sigStatus').textContent = 'Drawn signature ready. Drag on PDF.';
+        $('#sigStatus').textContent = 'Drawn signature ready. Click & drag on the page to place it.';
       }), 'image/png');
     };
 
@@ -415,7 +419,7 @@
       state.signatureBytes = sigUploadBytes.slice();
       if (state.sigObjUrl) URL.revokeObjectURL(state.sigObjUrl);
       state.sigObjUrl = URL.createObjectURL(new Blob([state.signatureBytes], { type: 'image/png' }));
-      $('#sigStatus').textContent = 'Signature ready. Drag on PDF.';
+      $('#sigStatus').textContent = 'Signature ready. Click & drag on the page to place it.';
     };
 
     // ══════════════════════════════════════════
@@ -531,13 +535,32 @@
           el.appendChild(txt);
         }
 
-        // Click to select (only when not in a tool mode)
+        // Click to select + drag to move
         el.style.pointerEvents = 'auto';
+        el.style.cursor = idx === state.selectedIdx ? 'move' : 'pointer';
         el.addEventListener('mousedown', ev => {
           if (isDragging) return;
-          ev.stopPropagation();
+          ev.stopPropagation(); ev.preventDefault();
           state.selectedIdx = idx;
           drawPlacedMarkers();
+          // Start drag-to-move
+          const p = state.placements[idx];
+          const startMX = ev.clientX, startMY = ev.clientY;
+          const origX = p.x, origY = p.y;
+          let moved = false;
+          const onMove = me => {
+            const dx = me.clientX - startMX, dy = me.clientY - startMY;
+            if (!moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+            moved = true;
+            p.x = origX + dx; p.y = origY + dy;
+            drawPlacedMarkers();
+          };
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
         });
 
         wrapper.appendChild(el);
